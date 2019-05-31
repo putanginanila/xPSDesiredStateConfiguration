@@ -1,3 +1,5 @@
+# Suppress Global Vars PSSA Error because $global:DSCMachineStatus must be allowed
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidGlobalVars', '')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '')]
 param()
 
@@ -17,56 +19,65 @@ $script:msiTools = $null
 
 function Get-TargetResource
 {
-    [OutputType([System.Collections.Hashtable])]
+    [OutputType([Hashtable])]
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $Name,
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path,
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $ProductId,
 
-        [Parameter()]
-        [System.Boolean]
+        [Boolean]
         $CreateCheckRegValue = $false,
 
-        [Parameter()]
-        [ValidateSet('LocalMachine', 'CurrentUser')]
-        [System.String]
+        [ValidateSet('LocalMachine','CurrentUser')]
+        [String]
         $InstalledCheckRegHive = 'LocalMachine',
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegKey,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueName,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueData
     )
 
-    Write-Verbose -Message $script:localizedData.EnteringGetTargetResource
-
     Assert-PathExtensionValid -Path $Path
+    $uri = Convert-PathToUri -Path $Path
+    $identifyingNumber = [String]::Empty
 
-    $identifyingNumber = [System.String]::Empty
+    <# 
+    
+    Adding [String]::IsNullOrEmpty($arguments) condition allows passing the executable registry id as the 
+    productId for registry check. This alleviates the overhead of scraping the 2 uninstall hives every 
+    time an executable is set/test.
+    
+    This module does not implement arguments when handling MSI installations so there 
+    should be no conflicts
+    
+    #>
 
-    if (-not [System.String]::IsNullOrEmpty($ProductId))
+    if (-not [String]::IsNullOrEmpty($ProductId) -and [String]::IsNullOrEmpty($arguments))
     {
         $identifyingNumber = Convert-ProductIdToIdentifyingNumber -ProductId $ProductId
+    }
+    # add else statement for EXE productId reg check
+    else
+    {
+        $identifyingNumber = $ProductId
     }
 
     $packageResourceResult = @{}
@@ -134,7 +145,7 @@ function Get-TargetResource
     {
         try
         {
-            $installDate = '{0:d}' -f [System.DateTime]::ParseExact($installDate, 'yyyyMMdd',[System.Globalization.CultureInfo]::CurrentCulture).Date
+            $installDate = '{0:d}' -f [DateTime]::ParseExact($installDate, 'yyyyMMdd',[System.Globalization.CultureInfo]::CurrentCulture).Date
         }
         catch
         {
@@ -178,92 +189,72 @@ function Set-TargetResource
     [CmdletBinding(SupportsShouldProcess = $true)]
     param
     (
-        [Parameter()]
         [ValidateSet('Present', 'Absent')]
-        [System.String]
+        [String]
         $Ensure = 'Present',
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $Name,
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path,
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $ProductId,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $Arguments,
 
-        [Parameter()]
-        [System.Management.Automation.PSCredential]
+        [PSCredential]
         [System.Management.Automation.Credential()]
         $Credential,
 
         # Return codes 1641 and 3010 indicate success when a restart is requested per installation
-        [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [System.UInt32[]]
+        [UInt32[]]
         $ReturnCode = @( 0, 1641, 3010 ),
 
-        [Parameter()]
-        [System.String]
+        [String]
         $LogPath,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $FileHash,
 
-        [Parameter()]
         [ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512', 'MD5', 'RIPEMD160')]
-        [System.String]
+        [String]
         $HashAlgorithm,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerSubject,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerThumbprint,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $ServerCertificateValidationCallback,
 
-        [Parameter()]
-        [System.Boolean]
+        [Boolean]
         $CreateCheckRegValue = $false,
 
-        [Parameter()]
-        [ValidateSet('LocalMachine', 'CurrentUser')]
-        [System.String]
+        [ValidateSet('LocalMachine','CurrentUser')]
+        [String]
         $InstalledCheckRegHive = 'LocalMachine',
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegKey,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueName,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueData,
 
-        [Parameter()]
-        [System.Boolean]
-        $IgnoreReboot = $false,
-
-        [Parameter()]
         [System.Management.Automation.PSCredential]
         [System.Management.Automation.CredentialAttribute()]
         $RunAsCredential
@@ -279,7 +270,18 @@ function Set-TargetResource
     Assert-PathExtensionValid -Path $Path
     $uri = Convert-PathToUri -Path $Path
 
-    if (-not [System.String]::IsNullOrEmpty($ProductId))
+    <# 
+    
+    Adding [String]::IsNullOrEmpty($arguments) condition allows passing the executable registry id as the 
+    productId for registry check. This alleviates the overhead of scraping the 2 uninstall hives every 
+    time an executable is set/test.
+    
+    This module does not implement arguments when handling MSI installations so there 
+    should be no conflicts
+    
+    #>
+
+    if (-not [String]::IsNullOrEmpty($ProductId) -and [String]::IsNullOrEmpty($arguments))
     {
         $identifyingNumber = Convert-ProductIdToIdentifyingNumber -ProductId $ProductId
     }
@@ -306,7 +308,7 @@ function Set-TargetResource
     try
     {
         $fileExtension = [System.IO.Path]::GetExtension($Path).ToLower()
-        if (-not [System.String]::IsNullOrEmpty($LogPath))
+        if (-not [String]::IsNullOrEmpty($LogPath))
         {
             try
             {
@@ -344,7 +346,7 @@ function Set-TargetResource
             if ($uri.IsUnc -and $PSCmdlet.ShouldProcess($script:localizedData.MountSharePath, $null, $null))
             {
                 $psDriveArgs = @{
-                    Name = [System.Guid]::NewGuid()
+                    Name = [Guid]::NewGuid()
                     PSProvider = 'FileSystem'
                     Root = Split-Path -Path $uri.LocalPath
                 }
@@ -402,15 +404,15 @@ function Set-TargetResource
                             Write-Verbose -Message ($script:localizedData.SettingAuthenticationLevel)
                             $webRequest.AuthenticationLevel = [System.Net.Security.AuthenticationLevel]::None
                         }
-                        elseif ($uriScheme -eq 'https' -and -not [System.String]::IsNullOrEmpty($ServerCertificateValidationCallback))
+                        elseif ($uriScheme -eq 'https' -and -not [String]::IsNullOrEmpty($ServerCertificateValidationCallback))
                         {
                             Write-Verbose -Message 'Assigning user-specified certificate verification callback'
-                            $serverCertificateValidationScriptBlock = [System.Management.Automation.ScriptBlock]::Create($ServerCertificateValidationCallback)
+                            $serverCertificateValidationScriptBlock = [ScriptBlock]::Create($ServerCertificateValidationCallback)
                             $webRequest.ServerCertificateValidationCallBack = $serverCertificateValidationScriptBlock
                         }
 
                         Write-Verbose -Message ($script:localizedData.Gettingtheschemeresponsestream -f $uriScheme)
-                        $responseStream = (([System.Net.HttpWebRequest] $webRequest).GetResponse()).GetResponseStream()
+                        $responseStream = (([System.Net.HttpWebRequest]$webRequest).GetResponse()).GetResponseStream()
                     }
                     catch
                     {
@@ -478,12 +480,12 @@ function Set-TargetResource
                 $productName = Get-MsiProductName -Path $Path
                 $productCode = Get-MsiProductCode -Path $Path
 
-                if ((-not [System.String]::IsNullOrEmpty($Name)) -and ($productName -ne $Name))
+                if ((-not [String]::IsNullOrEmpty($Name)) -and ($productName -ne $Name))
                 {
                     New-InvalidArgumentException -ArgumentName 'Name' -Message ($script:localizedData.InvalidNameOrId -f $Name, $identifyingNumber, $productName, $productCode)
                 }
 
-                if ((-not [System.String]::IsNullOrEmpty($identifyingNumber)) -and ($identifyingNumber -ne $productCode))
+                if ((-not [String]::IsNullOrEmpty($identifyingNumber)) -and ($identifyingNumber -ne $productCode))
                 {
                     New-InvalidArgumentException -ArgumentName 'ProductId' -Message ($script:localizedData.InvalidNameOrId -f $Name, $identifyingNumber, $productName, $productCode)
                 }
@@ -547,7 +549,7 @@ function Set-TargetResource
                     $id = Split-Path -Path $productEntry.Name -Leaf
                 }
 
-                $startInfo.Arguments = "/x `"$id`" /quiet /norestart"
+                $startInfo.Arguments = "/x $id /quiet /norestart"
 
                 if ($LogPath)
                 {
@@ -568,7 +570,7 @@ function Set-TargetResource
         {
             try
             {
-                [System.Int32] $exitCode = 0
+                [int] $exitCode = 0
                 if($PSBoundParameters.ContainsKey('RunAsCredential'))
                 {
                     $commandLine = '"{0}" {1}' -f $startInfo.FileName, $startInfo.Arguments
@@ -587,12 +589,10 @@ function Set-TargetResource
 
             if ($logStream)
             {
-                <#
-                    We have to re-mux these since they appear to us as different streams
-                    the underlying Win32 APIs prevent this problem, as would constructing a script
-                    on the fly and executing it, but the former is highly problematic from PowerShell
-                    and the latter doesn't let us get the return code for UI-based EXEs
-                #>
+                #We have to re-mux these since they appear to us as different streams
+                #The underlying Win32 APIs prevent this problem, as would constructing a script
+                #on the fly and executing it, but the former is highly problematic from PowerShell
+                #and the latter doesn't let us get the return code for UI-based EXEs
                 $outputEvents = Get-Event -SourceIdentifier $LogPath
                 $errorEvents = Get-Event -SourceIdentifier $errorLogPath
                 $masterEvents = @() + $outputEvents + $errorEvents
@@ -675,14 +675,7 @@ function Set-TargetResource
     if (($serverFeatureData -and $serverFeatureData.RequiresReboot) -or $registryData -or $exitcode -eq 3010 -or $exitcode -eq 1641)
     {
         Write-Verbose $script:localizedData.MachineRequiresReboot
-        if ($IgnoreReboot)
-        {
-            Write-Verbose $script:localizedData.IgnoreReboot
-        }
-        else
-        {
-            Set-DSCMachineRebootRequired
-        }
+        $global:DSCMachineStatus = 1
     }
     elseif ($Ensure -eq 'Present')
     {
@@ -718,108 +711,104 @@ function Set-TargetResource
 
 function Test-TargetResource
 {
-    [OutputType([System.Boolean])]
+    [OutputType([Boolean])]
     [CmdletBinding()]
     param
     (
-        [Parameter()]
         [ValidateSet('Present', 'Absent')]
-        [System.String]
+        [String]
         $Ensure = 'Present',
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $Name,
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path,
 
         [Parameter(Mandatory = $true)]
         [AllowEmptyString()]
-        [System.String]
+        [String]
         $ProductId,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $Arguments,
 
-        [Parameter()]
-        [System.Management.Automation.PSCredential]
+        [PSCredential]
         [System.Management.Automation.Credential()]
         $Credential,
 
         # Return codes 1641 and 3010 indicate success when a restart is requested per installation
-        [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [System.UInt32[]]
+        [UInt32[]]
         $ReturnCode = @( 0, 1641, 3010 ),
 
-        [Parameter()]
-        [System.String]
+        [String]
         $LogPath,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $FileHash,
 
-        [Parameter()]
         [ValidateSet('SHA1', 'SHA256', 'SHA384', 'SHA512', 'MD5', 'RIPEMD160')]
-        [System.String]
+        [String]
         $HashAlgorithm,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerSubject,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerThumbprint,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $ServerCertificateValidationCallback,
 
-        [Parameter()]
-        [System.Boolean]
+        [Boolean]
         $CreateCheckRegValue = $false,
 
-        [Parameter()]
-        [ValidateSet('LocalMachine', 'CurrentUser')]
-        [System.String]
+        [ValidateSet('LocalMachine','CurrentUser')]
+        [String]
         $InstalledCheckRegHive = 'LocalMachine',
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegKey,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueName,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueData,
 
-        [Parameter()]
-        [System.Boolean]
-        $IgnoreReboot = $false,
-
-        [Parameter()]
-        [System.Management.Automation.PSCredential]
+        [PSCredential]
         $RunAsCredential
     )
 
     Assert-PathExtensionValid -Path $Path
+    $uri = Convert-PathToUri -Path $Path
     $identifyingNumber = $null
 
-    if (-not [System.String]::IsNullOrEmpty($ProductId))
+    <# 
+    
+    Adding [String]::IsNullOrEmpty($arguments) condition allows passing the executable registry id as the 
+    productId for registry check. This alleviates the overhead of scraping the 2 uninstall hives every 
+    time an executable is set/test.
+    
+    This module does not implement arguments when handling MSI installations so there 
+    should be no conflicts
+    
+    #>
+
+    if (-not [String]::IsNullOrEmpty($ProductId) -and [String]::IsNullOrEmpty($arguments))
     {
         $identifyingNumber = Convert-ProductIdToIdentifyingNumber -ProductId $ProductId
     }
-
+    #add else statement for EXE productId reg check
+    else
+    {
+        $identifyingNumber = $ProductId
+    }
     $getProductEntryParameters = @{
         Name = $Name
         IdentifyingNumber = $identifyingNumber
@@ -843,7 +832,7 @@ function Test-TargetResource
 
     Write-Verbose -Message ($script:localizedData.EnsureIsEnsure -f $Ensure)
 
-    if ($null -ne $productEntry)
+    if ($null -eq $productEntry)
     {
         Write-Verbose -Message ($script:localizedData.ProductIsProduct -f $productEntry)
     }
@@ -852,7 +841,7 @@ function Test-TargetResource
         Write-Verbose -Message 'Product installation cannot be determined'
     }
 
-    Write-Verbose -Message ($script:localizedData.ProductAsBooleanIs -f [System.Boolean] $productEntry)
+    Write-Verbose -Message ($script:localizedData.ProductAsBooleanIs -f [Boolean]$productEntry)
 
     if ($null -ne $productEntry)
     {
@@ -870,7 +859,7 @@ function Test-TargetResource
     {
         $displayName = $null
 
-        if (-not [System.String]::IsNullOrEmpty($Name))
+        if (-not [String]::IsNullOrEmpty($Name))
         {
             $displayName = $Name
         }
@@ -899,7 +888,7 @@ function Assert-PathExtensionValid
     (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path
     )
 
@@ -924,19 +913,19 @@ function Assert-PathExtensionValid
 #>
 function Convert-PathToUri
 {
-    [OutputType([System.Uri])]
+    [OutputType([Uri])]
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path
     )
 
     try
     {
-        $uri = [System.Uri] $Path
+        $uri = [Uri] $Path
     }
     catch
     {
@@ -947,7 +936,7 @@ function Convert-PathToUri
 
     if ($validUriSchemes -notcontains $uri.Scheme)
     {
-        Write-Verbose -Message ($script:localizedData.TheUriSchemeWasUriScheme -f $uri.Scheme)
+        Write-Verbose -Message ($Localized.TheUriSchemeWasUriScheme -f $uri.Scheme)
         New-InvalidArgumentException -ArgumentName 'Path' -Message ($script:localizedData.InvalidPath -f $Path)
     }
 
@@ -963,20 +952,20 @@ function Convert-PathToUri
 #>
 function Convert-ProductIdToIdentifyingNumber
 {
-    [OutputType([System.String])]
+    [OutputType([String])]
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $ProductId
     )
 
     try
     {
         Write-Verbose -Message ($script:localizedData.ParsingProductIdAsAnIdentifyingNumber -f $ProductId)
-        $identifyingNumber = '{{{0}}}' -f [System.Guid]::Parse($ProductId).ToString().ToUpper()
+        $identifyingNumber = '{{{0}}}' -f [Guid]::Parse($ProductId).ToString().ToUpper()
 
         Write-Verbose -Message ($script:localizedData.ParsedProductIdAsIdentifyingNumber -f $ProductId, $identifyingNumber)
         return $identifyingNumber
@@ -1011,22 +1000,19 @@ function Assert-RegistryParametersValid
     [CmdletBinding()]
     param
     (
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegKey,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueName,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueData
     )
 
     foreach ($parameter in $PSBoundParameters.Keys)
     {
-        if ([System.String]::IsNullOrEmpty($PSBoundParameters[$parameter]))
+        if ([String]::IsNullOrEmpty($PSBoundParameters[$parameter]))
         {
             New-InvalidArgumentException -ArgumentName $parameter -Message ($script:localizedData.ProvideParameterForRegistryCheck -f $parameter)
         }
@@ -1063,33 +1049,26 @@ function Get-ProductEntry
     [CmdletBinding()]
     param
     (
-        [Parameter()]
-        [System.String]
+        [String]
         $Name,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $IdentifyingNumber,
 
-        [Parameter()]
-        [System.Management.Automation.SwitchParameter]
+        [Switch]
         $CreateCheckRegValue,
 
-        [Parameter()]
         [ValidateSet('LocalMachine', 'CurrentUser')]
-        [System.String]
+        [String]
         $InstalledCheckRegHive = 'LocalMachine',
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegKey,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueName,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $InstalledCheckRegValueData
     )
 
@@ -1098,7 +1077,7 @@ function Get-ProductEntry
 
     $productEntry = $null
 
-    if (-not [System.String]::IsNullOrEmpty($IdentifyingNumber))
+    if (-not [String]::IsNullOrEmpty($IdentifyingNumber))
     {
         $productEntryKeyLocation = Join-Path -Path $uninstallRegistryKey -ChildPath $IdentifyingNumber
         $productEntry = Get-Item -Path $productEntryKeyLocation -ErrorAction 'SilentlyContinue'
@@ -1177,11 +1156,11 @@ function Get-RegistryValueWithErrorsIgnored
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Key,
 
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Value,
 
         [Parameter(Mandatory = $true)]
@@ -1229,13 +1208,12 @@ function Get-LocalizedRegistryKeyValue
     [CmdletBinding()]
     param
     (
-        [Parameter()]
-        [System.Object]
+        [Object]
         $RegistryKey,
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $ValueName
     )
 
@@ -1274,32 +1252,28 @@ function Assert-FileValid
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Path,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $FileHash,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $HashAlgorithm,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerThumbprint,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $SignerSubject
     )
 
-    if (-not [System.String]::IsNullOrEmpty($FileHash))
+    if (-not [String]::IsNullOrEmpty($FileHash))
     {
         Assert-FileHashValid -Path $Path -Hash $FileHash -Algorithm $HashAlgorithm
     }
 
-    if (-not [System.String]::IsNullOrEmpty($SignerThumbprint) -or -not [System.String]::IsNullOrEmpty($SignerSubject))
+    if (-not [String]::IsNullOrEmpty($SignerThumbprint) -or -not [String]::IsNullOrEmpty($SignerSubject))
     {
         Assert-FileSignatureValid -Path $Path -Thumbprint $SignerThumbprint -Subject $SignerSubject
     }
@@ -1324,20 +1298,18 @@ function Assert-FileHashValid
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Path,
 
-        [Parameter()]
-        [Parameter(Mandatory = $true)]
-        [System.String]
+        [Parameter(Mandatory)]
+        [String]
         $Hash,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $Algorithm = 'SHA256'
     )
 
-    if ([System.String]::IsNullOrEmpty($Algorithm))
+    if ([String]::IsNullOrEmpty($Algorithm))
     {
         $Algorithm = 'SHA256'
     }
@@ -1371,15 +1343,13 @@ function Assert-FileSignatureValid
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Path,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $Thumbprint,
 
-        [Parameter()]
-        [System.String]
+        [String]
         $Subject
     )
 
@@ -1416,13 +1386,13 @@ function Assert-FileSignatureValid
 #>
 function Get-MsiProductName
 {
-    [OutputType([System.String])]
+    [OutputType([String])]
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path
     )
 
@@ -1442,13 +1412,13 @@ function Get-MsiProductName
 #>
 function Get-MsiProductCode
 {
-    [OutputType([System.String])]
+    [OutputType([String])]
     [CmdletBinding()]
     param
     (
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Path
     )
 
@@ -1553,11 +1523,11 @@ function Invoke-PInvoke
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $CommandLine,
 
-        [Parameter(Mandatory = $true)]
-        [System.Management.Automation.PSCredential]
+        [Parameter(Mandatory)]
+        [PSCredential]
         [System.Management.Automation.CredentialAttribute()]
         $Credential
     )
@@ -1593,7 +1563,7 @@ function Invoke-Process
     [CmdletBinding()]
     [OutputType([System.Diagnostics.Process])]
     param (
-        [Parameter(Mandatory = $true)]
+        [Parameter(Mandatory)]
         [System.Diagnostics.Process]
         $Process,
 
@@ -1636,11 +1606,11 @@ function Set-RegistryValue
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Key,
 
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Value,
 
         [Parameter(Mandatory = $true)]
@@ -1649,7 +1619,7 @@ function Set-RegistryValue
 
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
-        [System.String]
+        [String]
         $Data
     )
 
@@ -1694,11 +1664,11 @@ function Remove-RegistryValue
     param
     (
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Key,
 
         [Parameter(Mandatory = $true)]
-        [System.String]
+        [String]
         $Value,
 
         [Parameter(Mandatory = $true)]
